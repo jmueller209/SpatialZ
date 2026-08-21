@@ -49,6 +49,9 @@ SpatialzCtx spatial_create_ctx(double min_lat, double max_lat, double min_lon, d
 // Creates a standard SpatialzCtx for Earth (-90 to 90 lat, -180 to 180 lon, 111.3195 km per degree).
 SpatialzCtx spatial_create_earth_ctx(void);
 
+// Creates a standard SpatialzCtx for the Celestial Sphere (-90 to 90 Dec, 0 to 360 RA, 1.0 units per degree).
+SpatialzCtx spatial_create_celestial_ctx(void);
+
 // Encodes lat/lon into a 64-bit Morton code using the context bounds
 uint64_t spatial_encode(double lat, double lon, SpatialzCtx ctx);
 

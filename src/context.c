@@ -14,3 +14,8 @@ SpatialzCtx spatial_create_ctx(double min_lat, double max_lat, double min_lon, d
 SpatialzCtx spatial_create_earth_ctx(void) {
     return spatial_create_ctx(-90.0, 90.0, -180.0, 180.0, 111.3195);
 }
+
+
+SpatialzCtx spatial_create_celestial_ctx(void) {
+    return spatial_create_ctx(-90.0, 90.0, -180.0, 180.0, 1.0);
+}
