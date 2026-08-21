@@ -8,10 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846264338327950288
-#endif
-
 #ifndef SPATIALZ_FAST_RADIUS_KM
 #define SPATIALZ_FAST_RADIUS_KM 1000.0
 #endif
@@ -22,13 +18,6 @@
 
 #define SPATIALZ_MAX_GRID_LEVEL 32U
 #define SPATIALZ_EPS_KM 1e-8
-
-// -----------------------------------------------------------------------------
-// Query model
-//
-// level 0  -> 1x1 grid block
-// level 32 -> complete 2^32 x 2^32 root block
-// -----------------------------------------------------------------------------
 
 typedef enum {
     QUERY_LOCAL = 0,
@@ -67,21 +56,12 @@ typedef struct {
     double dead_area;
 } ZBlock;
 
-// -----------------------------------------------------------------------------
-// Morton helpers
-// The bit convention must match spatial_encode(): x in even bits, y in odd bits.
-// -----------------------------------------------------------------------------
-
 
 static inline uint64_t morton_encode_grid(uint32_t gx, uint32_t gy)
 {
     return spread_bits_32_to_64(gx) |
            (spread_bits_32_to_64(gy) << 1);
 }
-
-// -----------------------------------------------------------------------------
-// Basic range utilities
-// -----------------------------------------------------------------------------
 
 static int compare_ranges(const void *a, const void *b)
 {
@@ -125,9 +105,6 @@ static int merge_ranges(SpatialRange *ranges, int count)
     return write + 1;
 }
 
-// -----------------------------------------------------------------------------
-// Geometry helpers
-// -----------------------------------------------------------------------------
 
 static inline double deg_to_rad(double x)
 {
@@ -205,11 +182,6 @@ static double block_dead_area_estimate(
     return w * h;
 }
 
-// -----------------------------------------------------------------------------
-// Block bounds in the fixed lon/lat grid.
-// IMPORTANT: lon_to_grid()/grid_to_lon() are independent of latitude.
-// -----------------------------------------------------------------------------
-
 static void get_block_bounds(
     const ZBlock *b,
     SpatialzCtx ctx,
@@ -223,7 +195,6 @@ static void get_block_bounds(
     const uint64_t gx1_64 = (uint64_t)b->gx + size - 1ULL;
     const uint64_t gy1_64 = (uint64_t)b->gy + size - 1ULL;
 
-    // Every valid block is contained in the 32-bit grid.
     const uint32_t gx1 = (uint32_t)gx1_64;
     const uint32_t gy1 = (uint32_t)gy1_64;
 
@@ -238,11 +209,6 @@ static void get_block_bounds(
     *max_lon = fmax(lon0, lon1);
 }
 
-// -----------------------------------------------------------------------------
-// Conservative local classification.
-// OUTSIDE is exact for the Euclidean rectangle model.
-// INSIDE is exact for the Euclidean rectangle model.
-// -----------------------------------------------------------------------------
 
 static BlockClass classify_local(
     ZBlock *b,
@@ -275,7 +241,6 @@ static BlockClass classify_local(
     if (max_d2 <= q->radius_sq_km)
         return BLOCK_INSIDE;
 
-    // Deterministic 9-point estimate used only for split ranking.
     const double lat_mid = 0.5 * (min_lat + max_lat);
     const double lon_mid = 0.5 * (min_lon + max_lon);
     const double lat[3] = { min_lat, lat_mid, max_lat };
@@ -296,13 +261,6 @@ static BlockClass classify_local(
     return BLOCK_INTERSECT;
 }
 
-// -----------------------------------------------------------------------------
-// Conservative spherical classification for large-radius queries.
-// We use triangle-inequality bounds around the geographic block center.
-// This is deliberately conservative: a block is never discarded unless
-// the entire block is provably outside. This preserves coverage.
-// -----------------------------------------------------------------------------
-
 static BlockClass classify_spherical(
     ZBlock *b,
     const FastQueryCtx *q,
@@ -317,7 +275,6 @@ static BlockClass classify_spherical(
     const double lat_half = 0.5 * deg_to_rad(max_lat - min_lat);
     const double lon_half = 0.5 * deg_to_rad(max_lon - min_lon);
 
-    // Safe upper bound: travel meridionally then longitudinally.
     double block_radius = lat_half + lon_half;
     if (block_radius > M_PI)
         block_radius = M_PI;
@@ -328,7 +285,6 @@ static BlockClass classify_spherical(
         deg_to_rad(lat_mid),
         deg_to_rad(lon_mid));
 
-    // Small padding accounts for grid quantization and floating-point edges.
     const double padded_radius = q->radius_rad + deg_to_rad(1e-8);
 
     if (center_angle - block_radius > padded_radius) {
@@ -342,7 +298,6 @@ static BlockClass classify_spherical(
         return BLOCK_INSIDE;
     }
 
-    // The bound is intentionally simple because it is only used to rank splits.
     const double R = earth_radius_km(&ctx);
     const double lat_span_km = fabs(max_lat - min_lat) * ctx.unit_length;
     const double lon_scale = fmax(0.0, cos(deg_to_rad(lat_mid)));
@@ -351,7 +306,6 @@ static BlockClass classify_spherical(
 
     const double area = lat_span_km * lon_span_km;
 
-    // Nine-point estimate is safe for ranking, not for rejection.
     const double lat[3] = { min_lat, lat_mid, max_lat };
     const double lon[3] = { min_lon, lon_mid, max_lon };
     int inside = 0;
@@ -376,11 +330,6 @@ static BlockClass classify_block(
         return classify_spherical(b, q, ctx);
     return classify_local(b, q, ctx);
 }
-
-// -----------------------------------------------------------------------------
-// Grid bounds for a longitude/latitude box.
-// Fixed rectangular projection: lon_to_grid depends ONLY on longitude.
-// -----------------------------------------------------------------------------
 
 static void get_grid_box(
     double min_lon,
@@ -442,11 +391,6 @@ static uint64_t count_root_blocks(
 
     return nx * ny;
 }
-
-// -----------------------------------------------------------------------------
-// Add aligned root blocks. Classification is done immediately so OUTSIDE
-// blocks never consume the active range budget.
-// -----------------------------------------------------------------------------
 
 static int create_root_blocks(
     double min_lon,
@@ -518,10 +462,6 @@ static int create_root_blocks(
     return count;
 }
 
-// -----------------------------------------------------------------------------
-// Split block into up to four children. Children outside the query are removed.
-// -----------------------------------------------------------------------------
-
 static int make_children(
     const ZBlock *parent,
     const FastQueryCtx *queries,
@@ -563,10 +503,6 @@ static int make_children(
     return count;
 }
 
-// -----------------------------------------------------------------------------
-// Exact Morton range of an aligned quadtree block.
-// -----------------------------------------------------------------------------
-
 static SpatialRange encode_block(const ZBlock *b)
 {
     SpatialRange r;
@@ -584,12 +520,6 @@ static SpatialRange encode_block(const ZBlock *b)
     r.end_code = start + count - 1ULL;
     return r;
 }
-
-// -----------------------------------------------------------------------------
-// Greedy adaptive refinement.
-// We repeatedly choose the split with the largest estimated dead-area reduction
-// per newly consumed range. Zero-cost splits (one surviving child) are preferred.
-// -----------------------------------------------------------------------------
 
 static void refine_blocks(
     ZBlock *blocks,
@@ -657,11 +587,6 @@ static void refine_blocks(
     }
 }
 
-// -----------------------------------------------------------------------------
-// Query construction.
-// For local mode we use the fast equirectangular model.
-// For large radii we use a spherical cap and exact spherical bounding box.
-// -----------------------------------------------------------------------------
 
 static bool make_query(
     double center_lat,
@@ -765,7 +690,6 @@ static void get_query_lon_segments(
         return;
     }
 
-    // Spherical cap bounding box.
     const double alpha = q->radius_rad;
     const double phi = q->center_lat_rad;
 
@@ -781,7 +705,6 @@ static void get_query_lon_segments(
     *min_lat = rad_to_deg(fmax(-M_PI * 0.5, phi - alpha));
     *max_lat = rad_to_deg(fmin( M_PI * 0.5, phi + alpha));
 
-    // Once either pole is inside the cap, all longitudes occur in the cap.
     if (phi + alpha >= M_PI * 0.5 || phi - alpha <= -M_PI * 0.5) {
         *seg1_min_lon = ctx.min_long;
         *seg1_max_lon = ctx.max_long;
@@ -844,14 +767,14 @@ bool spatial_get_radius_ranges(
     double center_lon,
     double radius_km,
     SpatialRange *out_ranges,
-    int *num_ranges,
+    int *out_num_ranges,
     int max_ranges,
     SpatialzCtx ctx)
 {
-    if (!out_ranges || !num_ranges || max_ranges <= 0)
+    if (!out_ranges || !out_num_ranges || max_ranges <= 0)
         return false;
 
-    *num_ranges = 0;
+    *out_num_ranges = 0;
 
     FastQueryCtx q;
     if (!make_query(center_lat, center_lon, radius_km, ctx, &q))
@@ -871,8 +794,6 @@ bool spatial_get_radius_ranges(
         &segment_count,
         queries);
 
-    // The maximum active block count is max_ranges. This is deterministic
-    // stack memory and does not require malloc/free on the embedded path.
     ZBlock blocks[max_ranges];
     int block_count = 0;
 
@@ -923,6 +844,6 @@ bool spatial_get_radius_ranges(
     if (range_count > max_ranges)
         return false;
 
-    *num_ranges = range_count;
+    *out_num_ranges = range_count;
     return range_count > 0;
 }

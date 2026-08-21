@@ -3,10 +3,6 @@
 #include "utils.h"
 #include "../include/spatial_z.h"
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846264338327950288
-#endif
-
 #define GRID_MAX_UINT 4294967295.0
 
 uint32_t lat_to_grid(double lat, SpatialzCtx ctx)
@@ -24,9 +20,6 @@ uint32_t lat_to_grid(double lat, SpatialzCtx ctx)
     return (uint32_t)(norm * GRID_MAX_UINT);
 }
 
-// FIXED rectangular longitude axis.
-// Longitude no longer depends on latitude. This is essential for a valid
-// global Morton/Z-order grid.
 uint32_t lon_to_grid(double lon, SpatialzCtx ctx)
 {
     if (lon < ctx.min_long) lon = ctx.min_long;

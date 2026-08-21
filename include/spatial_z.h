@@ -13,13 +13,6 @@ typedef struct {
 } SpatialzCtx;
 
 typedef struct {
-    double top_left_lat;
-    double top_left_lon;
-    double bottom_right_lat;
-    double bottom_right_long;
-}Box; 
-
-typedef struct {
     uint64_t start_code;
     uint64_t end_code;
 } SpatialRange;
@@ -32,7 +25,7 @@ bool spatial_decode(uint64_t code, double* out_lat, double* out_long, SpatialzCt
 
 // Calculates 1D Morton code ranges for a radius search
 bool spatial_get_radius_ranges(double center_lat, double center_lon, double radius_km, 
-                               SpatialRange* out_ranges, int* num_ranges, int max_ranges, 
+                               SpatialRange* out_ranges, int* out_num_ranges, int max_ranges, 
                                SpatialzCtx ctx);
 
 // Calculate spatial distance between 2 morton Codes
