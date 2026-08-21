@@ -4,6 +4,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     double min_lat;
     double max_lat;
@@ -11,6 +15,28 @@ typedef struct {
     double max_long;
     double unit_length; // distance between 1 degree of latitude: Used for calculating distances
 } SpatialzCtx;
+
+typedef struct {
+    SpatialzCtx spatialCtx;
+    union {
+        // Only used for local comparisons
+        struct {
+            double lat;
+            double lon;
+            double km_per_deg_lat;
+            double km_per_deg_lon;
+            double radius_squared;
+        } local;
+
+        // Only used for spherical comparisons
+        struct {
+            double center_lat_rad;
+            double center_lon_rad;
+            double cos_center_lat;
+            double max_haversine_a;
+        } spherical;
+    };
+} CompareCtx;
 
 typedef struct {
     uint64_t start_code;
@@ -28,7 +54,18 @@ bool spatial_get_radius_ranges(double center_lat, double center_lon, double radi
                                SpatialRange* out_ranges, int* out_num_ranges, int max_ranges, 
                                SpatialzCtx ctx);
 
-// Calculate spatial distance between 2 morton Codes
-uint64_t spatial_get_distance(uint64_t code_1, uint64_t code_2, SpatialzCtx ctx);
+// Initializes the context for point-in-radius checks, pre-calculating math based on the chosen mode.
+CompareCtx spatial_create_compare_ctx(double center_lat, double center_lon, double radius_km, bool is_spherical, SpatialzCtx spatialCtx);
+
+// Fast Euclidean distance check for small radii (uses the local struct fields).
+bool spatial_code_is_in_local_radius(uint64_t code, CompareCtx ctx);
+
+// Accurate Haversine distance check for large radii (uses the spherical struct fields).
+bool spatial_code_is_in_spherical_radius(uint64_t code, CompareCtx ctx);
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // SPATIAL_Z_H
