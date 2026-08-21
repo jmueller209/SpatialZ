@@ -1,4 +1,5 @@
 #include "../include/spatial_z.h"
+#include "utils.h"
 #include <math.h>
 
 
