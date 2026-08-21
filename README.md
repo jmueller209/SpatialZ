@@ -4,6 +4,8 @@ A lightweight, high-performance C99 library for geographic Z-order (Morton) inde
 
 Spatial_Z translates 2D geographic circles (latitude, longitude, and radius) into highly optimized 1D integer ranges (Morton codes). This allows databases or embedded systems to perform extremely fast spatial searches using standard 1D indexes (like B-trees) instead of expensive 2D math, while safely handling geospatial edge cases like polar map distortion and International Date Line wrapping.
 
+![alt text](docs/Example.png)
+
 ## Features
 
 *   **Zero Dependencies:** Pure C99, requiring only the standard `<math.h>` library. C++ compatible.
