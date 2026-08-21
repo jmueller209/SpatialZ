@@ -7,7 +7,7 @@ Spatial_Z translates 2D geographic circles (latitude, longitude, and radius) int
 ## Features
 
 *   **Zero Dependencies:** Pure C99, requiring only the standard `<math.h>` library. C++ compatible.
-*   **Dual-Mode Math:** Automatically switches between blazing-fast flat-Earth approximations (for small radii) and accurate 3D spherical Haversine math (for massive radii or polar regions).
+*   **Dual-Mode Math:** Automatically switches between fast flat-Earth approximations (for small radii) and accurate 3D spherical Haversine math (for massive radii or polar regions).
 *   **Quad-Tree Refinement:** Uses a greedy algorithm to build the tightest possible bounding blocks around your search radius, minimizing database "dead area".
 *   **Hot-Loop Optimized:** Provides heavily optimized, trigonometry-free distance filtering functions designed to be placed directly into database result loops.
 
