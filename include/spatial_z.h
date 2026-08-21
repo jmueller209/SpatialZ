@@ -43,6 +43,12 @@ typedef struct {
     uint64_t end_code;
 } SpatialRange;
 
+// Creates and initializes a SpatialzCtx with custom boundaries and unit length.
+SpatialzCtx spatial_create_ctx(double min_lat, double max_lat, double min_lon, double max_lon, double unit_length);
+
+// Creates a standard SpatialzCtx for Earth (-90 to 90 lat, -180 to 180 lon, 111.3195 km per degree).
+SpatialzCtx spatial_create_earth_ctx(void);
+
 // Encodes lat/lon into a 64-bit Morton code using the context bounds
 uint64_t spatial_encode(double lat, double lon, SpatialzCtx ctx);
 
