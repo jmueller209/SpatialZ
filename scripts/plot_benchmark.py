@@ -7,9 +7,7 @@ import pandas as pd
 
 
 def run_benchmark():
-    base_dir = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..")
-    )
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
     build_dir = os.path.join(base_dir, "build")
     logs_dir = os.path.join(base_dir, "logs")
@@ -18,8 +16,7 @@ def run_benchmark():
     os.makedirs(logs_dir, exist_ok=True)
 
     executable = os.path.join(
-        build_dir,
-        "benchmark.exe" if os.name == "nt" else "benchmark"
+        build_dir, "benchmark.exe" if os.name == "nt" else "benchmark"
     )
 
     sources = [
@@ -28,6 +25,7 @@ def run_benchmark():
         os.path.join(base_dir, "src", "distances.c"),
         os.path.join(base_dir, "src", "ranges.c"),
         os.path.join(base_dir, "src", "utils.c"),
+        os.path.join(base_dir, "src", "context.c"),
     ]
 
     compile_command = [
@@ -40,7 +38,7 @@ def run_benchmark():
         "-lm",
     ]
 
-    print("Compiling benchmark...")
+    print("Compiling angle-based benchmark...")
 
     try:
         subprocess.run(
@@ -52,8 +50,7 @@ def run_benchmark():
         print("Benchmark compilation failed.")
         sys.exit(1)
 
-    print("Running benchmark...")
-    print()
+    print("Running benchmark...\n")
 
     try:
         subprocess.run(
@@ -69,19 +66,15 @@ def run_benchmark():
 
 
 def print_summary(df, failure_df):
-    print()
-    print("=" * 80)
-    print("SPATIAL_Z BENCHMARK SUMMARY")
+    print("\n" + "=" * 80)
+    print("SPATIAL_Z ANGLE-BASED BENCHMARK SUMMARY")
     print("=" * 80)
 
     for bucket in df["bucket"].unique():
         subset = df[df["bucket"] == bucket]
 
         runs = len(subset)
-
-        failure_rate = (
-            subset["coverage_failure"].mean() * 100.0
-        )
+        failure_rate = subset["coverage_failure"].mean() * 100.0
 
         mean_ranges = subset["num_ranges"].mean()
         std_ranges = subset["num_ranges"].std()
@@ -96,48 +89,20 @@ def print_summary(df, failure_df):
         std_time = subset["exec_time_us"].std()
         max_time = subset["exec_time_us"].max()
 
-        print()
-        print(f"Radius Bucket: {bucket}")
-        print(f"  Runs:                 {runs}")
-        print(
-            f"  Coverage Failure:     "
-            f"{failure_rate:.2f}%"
-        )
-        print(
-            f"  Ranges:               "
-            f"{mean_ranges:.2f} +/- {std_ranges:.2f}"
-        )
-        print(
-            f"  Usable Area:          "
-            f"{mean_usable:.2f}% +/- {std_usable:.2f}%"
-        )
-        print(
-            f"  Dead Area:            "
-            f"{mean_dead:.2f}%"
-        )
-        print(
-            f"  Maximum Dead Area:    "
-            f"{max_dead:.2f}%"
-        )
-        print(
-            f"  Execution Time:       "
-            f"{mean_time:.2f} +/- {std_time:.2f} us"
-        )
-        print(
-            f"  Maximum Time:         "
-            f"{max_time:.2f} us"
-        )
+        print(f"\nAngular Radius Bucket: {bucket}")
+        print(f"  Runs:                  {runs}")
+        print(f"  Coverage Failure:      {failure_rate:.2f}%")
+        print(f"  Ranges:                {mean_ranges:.2f} +/- {std_ranges:.2f}")
+        print(f"  Usable Area:           {mean_usable:.2f}% +/- {std_usable:.2f}%")
+        print(f"  Dead Area:             {mean_dead:.2f}%")
+        print(f"  Maximum Dead Area:     {max_dead:.2f}%")
+        print(f"  Execution Time:        {mean_time:.2f} +/- {std_time:.2f} us")
+        print(f"  Maximum Time:          {max_time:.2f} us")
 
         if failure_df is not None and not failure_df.empty:
-            failures = failure_df[
-                failure_df["bucket"] == bucket
-            ]
-
+            failures = failure_df[failure_df["bucket"] == bucket]
             if not failures.empty:
-                print(
-                    f"  Logged Failures:      "
-                    f"{len(failures)}"
-                )
+                print(f"  Logged Failures:       {len(failures)}")
 
 
 def create_plots(df):
@@ -159,55 +124,41 @@ def create_plots(df):
         ax_dead = axes[i, 1]
         ax_time = axes[i, 2]
 
+        # Range Count Plot
         ax_ranges.hist(
             subset["num_ranges"],
             bins=range(
-                int(subset["num_ranges"].min()),
-                int(subset["num_ranges"].max()) + 2
+                int(subset["num_ranges"].min()), int(subset["num_ranges"].max()) + 2
             ),
             edgecolor="black",
         )
-
-        ax_ranges.set_title(
-            f"Range Count\n{bucket}"
-        )
-
+        ax_ranges.set_title(f"Range Count\n{bucket}")
         ax_ranges.set_xlabel("Number of ranges")
         ax_ranges.set_ylabel("Frequency")
 
-        dead_area = (
-            100.0 -
-            subset["usable_area_pct"]
-        )
-
+        # Dead Area Plot
+        dead_area = 100.0 - subset["usable_area_pct"]
         ax_dead.hist(
             dead_area,
             bins=15,
             edgecolor="black",
         )
-
-        ax_dead.set_title(
-            f"Dead Area\n{bucket}"
-        )
-
+        ax_dead.set_title(f"Dead Area\n{bucket}")
         ax_dead.set_xlabel("Dead area (%)")
         ax_dead.set_ylabel("Frequency")
 
+        # Execution Time Plot
         ax_time.hist(
             subset["exec_time_us"],
             bins=15,
             edgecolor="black",
         )
-
-        ax_time.set_title(
-            f"Execution Time\n{bucket}"
-        )
-
+        ax_time.set_title(f"Execution Time\n{bucket}")
         ax_time.set_xlabel("Time (µs)")
         ax_time.set_ylabel("Frequency")
 
     fig.suptitle(
-        "Spatial_Z Range Generation Benchmark",
+        "Spatial_Z Angle-Based Range Generation Benchmark",
         fontsize=16,
         fontweight="bold",
     )
@@ -224,9 +175,7 @@ def create_plots(df):
         bbox_inches="tight",
     )
 
-    print()
-    print(f"Plot saved to: {output_path}")
-
+    print(f"\nPlot saved to: {output_path}")
     plt.show()
 
 
@@ -252,7 +201,6 @@ def main():
     df = pd.read_csv(results_path)
 
     failure_df = None
-
     if os.path.exists(failure_path):
         failure_df = pd.read_csv(failure_path)
 

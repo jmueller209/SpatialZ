@@ -32,6 +32,11 @@ test_codec: $(BUILD_DIR) tests/test_codec_roundtrip.c $(SRC)
 	$(CC) $(CFLAGS) tests/test_codec_roundtrip.c $(SRC) -o $(BUILD_DIR)/test_codec_roundtrip $(LDFLAGS)
 	./$(BUILD_DIR)/test_codec_roundtrip
 
+test_range_generation: $(BUILD_DIR) tests/test_range_generation.c $(SRC)
+	$(CC) $(CFLAGS) tests/test_range_generation.c $(SRC) -o $(BUILD_DIR)/test_range_generation $(LDFLAGS)
+	./$(BUILD_DIR)/test_range_generation
+
+
 test_range_coverage: $(BUILD_DIR) tests/test_range_coverage.c $(SRC)
 	$(CC) $(CFLAGS) tests/test_range_coverage.c $(SRC) -o $(BUILD_DIR)/test_range_coverage $(LDFLAGS)
 	./$(BUILD_DIR)/test_range_coverage

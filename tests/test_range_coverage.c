@@ -221,7 +221,7 @@ static void sample_boundary(
     *lon = normalize_lon(rad_to_deg(lam2));
 }
 
-static bool code_in_ranges(uint64_t code, const SpatialRange *ranges, int count)
+static bool code_in_ranges(uint64_t code, const MortonRange *ranges, int count)
 {
     for (int i = 0; i < count; ++i) {
         if (code >= ranges[i].start_code && code <= ranges[i].end_code)
@@ -230,7 +230,7 @@ static bool code_in_ranges(uint64_t code, const SpatialRange *ranges, int count)
     return false;
 }
 
-static bool validate_ranges(const SpatialRange *ranges, int count, int max_ranges)
+static bool validate_ranges(const MortonRange *ranges, int count, int max_ranges)
 {
     if (count < 0 || count > max_ranges)
         return false;
@@ -251,13 +251,13 @@ static bool validate_ranges(const SpatialRange *ranges, int count, int max_range
     return true;
 }
 
-static unsigned __int128 range_len128(SpatialRange r)
+static unsigned __int128 range_len128(MortonRange r)
 {
     return ((unsigned __int128)r.end_code -
             (unsigned __int128)r.start_code) + 1U;
 }
 
-static unsigned __int128 total_span128(const SpatialRange *ranges, int count)
+static unsigned __int128 total_span128(const MortonRange *ranges, int count)
 {
     unsigned __int128 total = 0;
     for (int i = 0; i < count; ++i)
@@ -265,7 +265,7 @@ static unsigned __int128 total_span128(const SpatialRange *ranges, int count)
     return total;
 }
 
-static uint64_t sample_code_from_range(SpatialRange r)
+static uint64_t sample_code_from_range(MortonRange r)
 {
     const unsigned __int128 len = range_len128(r);
     const unsigned __int128 rnd =
@@ -275,7 +275,7 @@ static uint64_t sample_code_from_range(SpatialRange r)
 }
 
 static double estimate_dead_area_pct(
-    const SpatialRange *ranges,
+    const MortonRange *ranges,
     int num_ranges,
     int samples,
     double center_lat,
@@ -361,7 +361,7 @@ static Stats run_category(
         const double center_lon = random_double(cat->lon_min, cat->lon_max);
         const double radius = random_double(cat->radius_min, cat->radius_max);
 
-        SpatialRange ranges[max_ranges];
+        MortonRange ranges[max_ranges];
         int num_ranges = 0;
 
         struct timespec t0, t1;

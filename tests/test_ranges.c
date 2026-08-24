@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -16,24 +17,35 @@
 #define TOTAL_SAMPLES 10000
 
 int main(int argc, char** argv) {
-    if (argc != 5) {
-        printf("Usage: %s <center_lat> <center_lon> <radius_km> <max_ranges>\n", argv[0]);
+    if (argc != 6) {
+        printf("Usage: %s <earth|celestial> <y_coord> <x_coord> <radius> <max_ranges>\n", argv[0]);
+        printf("       y_coord: Latitude (Earth) or Declination (Celestial)\n");
+        printf("       x_coord: Longitude (Earth) or Right Ascension (Celestial)\n");
+        printf("       radius : km (Earth) or Degrees (Celestial)\n");
         return 1;
     }
 
-    double center_lat = atof(argv[1]);
-    double center_lon = atof(argv[2]);
-    double radius_km  = atof(argv[3]);
-    int max_ranges    = atoi(argv[4]);
+    const char* context_type = argv[1];
+    double center_y = atof(argv[2]); // lat / dec
+    double center_x = atof(argv[3]); // lon / ra
+    double radius   = atof(argv[4]); // km  / deg
+    int max_ranges  = atoi(argv[5]);
 
     SpatialzCtx ctx;
-    ctx.min_lat = -90.0;
-    ctx.max_lat = 90.0;
-    ctx.min_long = -180.0;
-    ctx.max_long = 180.0;
-    ctx.unit_length = 111.3195;
+    bool is_earth = true;
 
-    SpatialRange* ranges = (SpatialRange*)malloc(max_ranges * sizeof(SpatialRange));
+    if (strcmp(context_type, "earth") == 0) {
+        ctx = spatial_create_earth_ctx();
+        is_earth = true;
+    } else if (strcmp(context_type, "celestial") == 0) {
+        ctx = spatial_create_celestial_ctx();
+        is_earth = false;
+    } else {
+        printf("Error: Unknown context '%s'. Use 'earth' or 'celestial'.\n", context_type);
+        return 1;
+    }
+
+    MortonRange* ranges = (MortonRange*)malloc(max_ranges * sizeof(MortonRange));
     if (!ranges) {
         printf("Memory allocation failed.\n");
         return 1;
@@ -41,8 +53,8 @@ int main(int argc, char** argv) {
 
     int num_ranges = 0;
 
-    bool success = spatial_get_radius_ranges(center_lat, center_lon, radius_km, 
-                                             ranges, &num_ranges, max_ranges, ctx);
+    bool success = spatial_get_radius_ranges(center_y, center_x, radius, 
+                                             ranges, &num_ranges, max_ranges, &ctx);
 
     if (!success || num_ranges == 0) {
         printf("No ranges found.\n");
@@ -65,7 +77,11 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    fprintf(f, "type,lat,lon,range_id\n");
+    if (is_earth) {
+        fprintf(f, "type,lat,lon,range_id\n");
+    } else {
+        fprintf(f, "type,dec,ra,range_id\n");
+    }
 
     for (int i = 0; i < num_ranges; i++) {
         uint64_t start = ranges[i].start_code;
@@ -74,21 +90,21 @@ int main(int argc, char** argv) {
         bool printed_any = false;
 
         for (uint64_t code = start; code <= end; code += global_step) {
-            double out_lat = 0.0;
-            double out_lon = 0.0;
+            float out_y = 0.0;
+            float out_x = 0.0;
 
-            if (spatial_decode(code, &out_lat, &out_lon, ctx)) {
-                fprintf(f, "point,%f,%f,%d\n", out_lat, out_lon, i);
+            if (spatial_decode(code, &out_y, &out_x, ctx)) {
+                fprintf(f, "point,%f,%f,%d\n", out_y, out_x, i);
                 printed_any = true;
             }
 
             if (code > UINT64_MAX - global_step) break; 
         }
         if (!printed_any) {
-            double out_lat = 0.0;
-            double out_lon = 0.0;
-            if (spatial_decode(start, &out_lat, &out_lon, ctx)) {
-                fprintf(f, "point,%f,%f,%d\n", out_lat, out_lon, i);
+            float out_y = 0.0;
+            float out_x = 0.0;
+            if (spatial_decode(start, &out_y, &out_x, ctx)) {
+                fprintf(f, "point,%f,%f,%d\n", out_y, out_x, i);
             }
         }
     }

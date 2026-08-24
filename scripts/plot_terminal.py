@@ -20,6 +20,7 @@ def compile_c_code():
         os.path.join(base_dir, "src", "distances.c"),
         os.path.join(base_dir, "src", "ranges.c"),
         os.path.join(base_dir, "src", "utils.c"),
+        os.path.join(base_dir, "src", "context.c"),
     ]
 
     compile_cmd = ["gcc"] + sources + ["-o", out_path, "-lm"]

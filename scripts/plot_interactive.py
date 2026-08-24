@@ -3,9 +3,7 @@ import os
 import sys
 import csv
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider
-
+import pyvista as pv
 
 def compile_c_code():
     print("Compiling C code...")
@@ -21,6 +19,7 @@ def compile_c_code():
         os.path.join(base_dir, "src", "distances.c"),
         os.path.join(base_dir, "src", "ranges.c"),
         os.path.join(base_dir, "src", "utils.c"),
+        os.path.join(base_dir, "src", "context.c"),
     ]
 
     compile_cmd = ["gcc"] + sources + ["-o", out_path, "-lm"]
@@ -36,39 +35,36 @@ def compile_c_code():
         sys.exit(1)
 
 
-def generate_true_circle(center_lat, center_lon, radius_km, num_points=100):
-    R_EARTH = 6371.0
-    lat1 = np.radians(center_lat)
-    lon1 = np.radians(center_lon)
-    bearings = np.radians(np.linspace(0, 360, num_points))
-    angular_distance = radius_km / R_EARTH
-
-    lat2 = np.arcsin(
-        np.sin(lat1) * np.cos(angular_distance)
-        + np.cos(lat1) * np.sin(angular_distance) * np.cos(bearings)
-    )
-    lon2 = lon1 + np.arctan2(
-        np.sin(bearings) * np.sin(angular_distance) * np.cos(lat1),
-        np.cos(angular_distance) - np.sin(lat1) * np.sin(lat2),
-    )
-    return np.degrees(lat2), np.degrees(lon2)
+def to_cartesian(lat_deg, lon_deg, r=1.0):
+    lat_rad = np.radians(lat_deg)
+    lon_rad = np.radians(lon_deg)
+    x = r * np.cos(lat_rad) * np.cos(lon_rad)
+    y = r * np.cos(lat_rad) * np.sin(lon_rad)
+    z = r * np.sin(lat_rad)
+    return np.column_stack((x, y, z))
 
 
-def generate_approx_circle(center_lat, center_lon, radius_km, num_points=100):
-    UNIT_LENGTH = 111.3195
-    theta = np.linspace(0, 2 * np.pi, num_points)
-    dx_km = radius_km * np.cos(theta)
-    dy_km = radius_km * np.sin(theta)
+def generate_true_circle_3d(center_y, center_x, angular_radius_deg, num_points=250):
+    y1 = np.radians(center_y)
+    x1 = np.radians(center_x)
+    rad = np.radians(angular_radius_deg)
+    bearings = np.linspace(0, 2 * np.pi, num_points)
 
-    lat2 = center_lat + (dy_km / UNIT_LENGTH)
-    cos_lat = np.cos(np.radians(center_lat))
-    lon2 = center_lon + (dx_km / (UNIT_LENGTH * cos_lat))
-    return lat2, lon2
+    y2 = np.arcsin(np.sin(y1) * np.cos(rad) + np.cos(y1) * np.sin(rad) * np.cos(bearings))
+    x2 = x1 + np.arctan2(np.sin(bearings) * np.sin(rad) * np.cos(y1),
+                         np.cos(rad) - np.sin(y1) * np.sin(y2))
+
+    return to_cartesian(np.degrees(y2), np.degrees(x2), r=1.005)
 
 
-def run_and_load(exe_path, base_dir, lat, lon, radius, max_ranges):
+def run_and_load(exe_path, base_dir, context, y, x, radius_angular, max_ranges):
+    if context == "earth":
+        rad_val = radius_angular * 111.3195
+    else:
+        rad_val = radius_angular
+
     result = subprocess.run(
-        [exe_path, str(lat), str(lon), str(radius), str(int(max_ranges))],
+        [exe_path, context, str(y), str(x), str(rad_val), str(int(max_ranges))],
         capture_output=True,
         text=True,
         cwd=base_dir,
@@ -77,108 +73,126 @@ def run_and_load(exe_path, base_dir, lat, lon, radius, max_ranges):
     if "SUCCESS" not in result.stdout:
         return [], [], []
 
-    lats, lons, range_ids = [], [], []
+    ys, xs, range_ids = [], [], []
     csv_path = os.path.join(base_dir, "logs", "ranges_output.csv")
 
     try:
         with open(csv_path, "r") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                if row["type"] == "point":
-                    lats.append(float(row["lat"]))
-                    lons.append(float(row["lon"]))
+                if row.get("type") == "point":
+                    if context == "earth":
+                        ys.append(float(row["lat"]))
+                        xs.append(float(row["lon"]))
+                    else:
+                        ys.append(float(row["dec"]))
+                        xs.append(float(row["ra"]))
                     range_ids.append(int(row["range_id"]))
     except FileNotFoundError:
         pass
 
-    return lats, lons, range_ids
+    return ys, xs, range_ids
 
 
 if __name__ == "__main__":
     EXE_PATH, BASE_DIR = compile_c_code()
+    state = {
+        'ctx': 'earth',
+        'y': 20.0,
+        'x': 45.0,
+        'rad': 15.0,
+        'ranges': 16
+    }
 
-    init_lat = 53.6
-    init_lon = 9.47
-    init_rad = 10.0
-    init_max_ranges = 16
+    plotter = pv.Plotter()
+    plotter.set_background("white")
 
-    fig, ax = plt.subplots(figsize=(10, 8))
-    plt.subplots_adjust(bottom=0.35)
+    globe = pv.Sphere(radius=0.99, theta_resolution=36, phi_resolution=18)
+    plotter.add_mesh(globe, color="whitesmoke", show_edges=True, edge_color="lightgray")
 
-    def update(val=None):
-        lat = slider_lat.val
-        lon = slider_lon.val
-        rad = slider_rad.val
-        m_ranges = int(slider_max_ranges.val)
+    pts_mesh = pv.PolyData(np.array([[0.0, 0.0, 0.0]]))
+    pts_mesh["RangeID"] = np.array([0])
 
-        ax.clear()
-        lats, lons, range_ids = run_and_load(
-            EXE_PATH, BASE_DIR, lat, lon, rad, m_ranges
-        )
+    circle_mesh = pv.lines_from_points(np.zeros((250, 3)), close=True)
+    center_mesh = pv.PolyData(np.array([[0.0, 0.0, 0.0]]))
 
-        if not lats:
-            ax.set_title("No points found or execution error.")
-            fig.canvas.draw_idle()
-            return
-
-        ax.scatter(
-            lons,
-            lats,
-            c=range_ids,
-            cmap="tab20",
-            s=2,
-            alpha=0.8,
-            label="Morton Z-Curve Points",
-        )
-
-        circle_lats, circle_lons = generate_true_circle(lat, lon, rad)
-        ax.plot(
-            circle_lons,
-            circle_lats,
-            color="red",
-            linewidth=2,
-            label="True Search Radius (Sphere)",
-        )
-
-        approx_lats, approx_lons = generate_approx_circle(lat, lon, rad)
-        ax.plot(
-            approx_lons,
-            approx_lats,
-            color="green",
-            linestyle="--",
-            linewidth=2,
-            label="Approximate Circle (Flat)",
-        )
-
-        ax.plot(lon, lat, "kx", markersize=10, label="Center")
-
-        ax.set_title(
-            f"Radius: {rad:.1f}km | Max Ranges: {m_ranges} | Generated: {max(range_ids)+1 if range_ids else 0}"
-        )
-        ax.set_xlabel("Longitude")
-        ax.set_ylabel("Latitude")
-        ax.legend(loc="upper right")
-
-        aspect_ratio = 1.0 / np.cos(np.radians(lat))
-        ax.set_aspect(aspect_ratio)
-        fig.canvas.draw_idle()
-
-    ax_lat = plt.axes([0.15, 0.20, 0.7, 0.03])
-    ax_lon = plt.axes([0.15, 0.15, 0.7, 0.03])
-    ax_rad = plt.axes([0.15, 0.10, 0.7, 0.03])
-    ax_max = plt.axes([0.15, 0.05, 0.7, 0.03])
-
-    slider_lat = Slider(ax_lat, "Center Lat", -80.0, 80.0, valinit=init_lat)
-    slider_lon = Slider(ax_lon, "Center Lon", -180.0, 180.0, valinit=init_lon)
-    slider_rad = Slider(ax_rad, "Radius (km)", 1.0, 500.0, valinit=init_rad)
-    slider_max_ranges = Slider(
-        ax_max, "Max Ranges", 4, 128, valinit=init_max_ranges, valstep=1, valfmt="%d"
+    pts_actor = plotter.add_mesh(
+        pts_mesh,
+        render_points_as_spheres=True,
+        point_size=7,
+        scalars="RangeID",
+        cmap="tab20",
+        show_scalar_bar=False
     )
 
-    slider_lat.on_changed(update)
-    slider_lon.on_changed(update)
-    slider_rad.on_changed(update)
-    slider_max_ranges.on_changed(update)
+    plotter.add_mesh(
+        circle_mesh,
+        color="red",
+        line_width=5,
+        render_lines_as_tubes=True
+    )
 
-    update()
-    plt.show()
+    plotter.add_mesh(
+        center_mesh,
+        color="black",
+        render_points_as_spheres=True,
+        point_size=12
+    )
+
+    def update_viz(*args):
+        ys, xs, r_ids = run_and_load(EXE_PATH, BASE_DIR, state['ctx'], state['y'], state['x'], state['rad'], state['ranges'])
+
+        if len(ys) > 0:
+            cart_pts = to_cartesian(np.array(ys), np.array(xs), r=1.001)
+            new_mesh = pv.PolyData(cart_pts)
+            new_mesh["RangeID"] = np.array(r_ids)
+            pts_mesh.copy_from(new_mesh)
+
+            max_id = max(r_ids)
+            pts_actor.mapper.scalar_range = (0, max_id if max_id > 0 else 1)
+        else:
+            pts_mesh.copy_from(pv.PolyData())
+
+        circle_mesh.points = generate_true_circle_3d(state['y'], state['x'], state['rad'])
+
+        center_mesh.points = to_cartesian([state['y']], [state['x']], r=1.006)
+
+        unit = "km" if state['ctx'] == "earth" else "deg"
+        disp_rad = state['rad'] * 111.3195 if state['ctx'] == "earth" else state['rad']
+
+        plotter.add_text(
+            f"Context: {state['ctx'].upper()}\n"
+            f"Center: Lat {state['y']:.1f}, Lon {state['x']:.1f}\n"
+            f"Radius: {disp_rad:.1f} {unit}\n"
+            f"Generated Ranges: {max(r_ids)+1 if r_ids else 0}",
+            position="upper_left", 
+            font_size=12, 
+            color="black", 
+            name="info_text"
+        )
+
+    def set_y(val): state['y'] = val; update_viz()
+    def set_x(val): state['x'] = val; update_viz()
+    def set_rad(val): state['rad'] = val; update_viz()
+    def set_ranges(val): state['ranges'] = int(val); update_viz()
+
+    plotter.add_slider_widget(set_y, [-90.0, 90.0], value=state['y'], title="Latitude", pointa=(0.02, 0.15), pointb=(0.25, 0.15))
+    plotter.add_slider_widget(set_x, [-180.0, 180.0], value=state['x'], title="Longitude", pointa=(0.28, 0.15), pointb=(0.51, 0.15))
+    plotter.add_slider_widget(set_rad, [0.1, 120.0], value=state['rad'], title="Angular Radius (Deg)", pointa=(0.54, 0.15), pointb=(0.77, 0.15))
+    plotter.add_slider_widget(set_ranges, [4, 128], value=state['ranges'], title="Max Ranges", fmt="%0.0f", pointa=(0.80, 0.15), pointb=(0.98, 0.15))
+
+    def toggle_context(flag):
+        state['ctx'] = 'celestial' if flag else 'earth'
+        update_viz()
+
+    plotter.add_checkbox_button_widget(toggle_context, value=False, position=(10, 10), size=30, color_on="purple", color_off="green")
+    plotter.add_text("Toggle Context (Green=Earth, Purple=Cel)", position=(50, 15), font_size=10, color="black")
+
+    update_viz()
+
+    print("\nControls:")
+    print(" - Left Click + Drag: Rotate sphere")
+    print(" - Scroll Wheel: Zoom")
+    print(" - Shift + Left Click: Pan")
+
+    plotter.show()

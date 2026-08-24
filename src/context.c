@@ -1,21 +1,26 @@
 #include "../include/spatial_z.h"
 
-SpatialzCtx spatial_create_ctx(double min_lat, double max_lat, double min_lon, double max_lon, double unit_length) {
+SpatialzCtx spatial_create_ctx(
+    float min_axis1,
+    float min_axis2,
+    float unit_length,
+    float flat_max_radius_deg
+) {
     SpatialzCtx ctx = {
-        .min_lat = min_lat,
-        .max_lat = max_lat,
-        .min_long = min_lon,
-        .max_long = max_lon,
-        .unit_length = unit_length
+        .min_axis1 = min_axis1,
+        .min_axis2 = min_axis2,
+        .unit_length = unit_length,
+        .flat_max_radius_deg = flat_max_radius_deg
     };
+
     return ctx;
 }
 
 SpatialzCtx spatial_create_earth_ctx(void) {
-    return spatial_create_ctx(-90.0, 90.0, -180.0, 180.0, 111.3195);
+    return spatial_create_ctx(-90, -180, 111.3195, 5.0);
 }
 
 
 SpatialzCtx spatial_create_celestial_ctx(void) {
-    return spatial_create_ctx(-90.0, 90.0, 0.0, 360.0, 1.0);
+    return spatial_create_ctx(-90 , 0, 1.0, 5.0);
 }

@@ -1,74 +1,313 @@
 #include "../include/spatial_z.h"
 #include "utils.h"
+#include <stddef.h>
 #include <math.h>
 
+#ifndef SPATIALZ_PI
+#define SPATIALZ_PI 3.14159265358979323846
+#endif
 
-CompareCtx spatial_create_compare_ctx(double center_lat, double center_lon, double radius, bool is_spherical, SpatialzCtx spatialCtx) {
-    CompareCtx ctx;
+static inline float deg_to_rad(float value)
+{
+    return value * (SPATIALZ_PI / 180.0);
+}
+
+static inline float rad_to_deg(float value)
+{
+    return value * (180.0 / SPATIALZ_PI);
+}
+
+static inline float clamp_float(
+    float value,
+    float minimum,
+    float maximum)
+{
+    if (value < minimum)
+        return minimum;
+
+    if (value > maximum)
+        return maximum;
+
+    return value;
+}
+
+static inline float surface_radius(
+    const SpatialzCtx *ctx)
+{
+    return ctx->unit_length *
+           (180.0 / SPATIALZ_PI);
+}
+
+static inline float normalize_axis2(
+    float axis2,
+    const SpatialzCtx *ctx)
+{
+    const float period = 360.0;
+
+    float normalized =
+        fmod(
+            axis2 - ctx->min_axis2,
+            period
+        );
+
+    if (normalized < 0.0)
+        normalized += period;
+
+    return ctx->min_axis2 + normalized;
+}
+
+static inline float angular_distance_rad(
+    float axis1_a_rad,
+    float axis2_a_rad,
+    float axis1_b_rad,
+    float axis2_b_rad)
+{
+    const float d_axis1 =
+        axis1_b_rad - axis1_a_rad;
+
+    const float d_axis2 =
+        axis2_b_rad - axis2_a_rad;
+
+    const float sin_axis1 =
+        sin(d_axis1 * 0.5);
+
+    const float sin_axis2 =
+        sin(d_axis2 * 0.5);
+
+    const float a =
+        sin_axis1 * sin_axis1 +
+        cos(axis1_a_rad) *
+        cos(axis1_b_rad) *
+        sin_axis2 * sin_axis2;
+
+    return 2.0 *
+           asin(
+               sqrt(
+                   clamp_float(
+                       a,
+                       0.0,
+                       1.0
+                   )
+               )
+           );
+}
+
+CompareCtx spatial_create_compare_ctx(
+    float center_axis1,
+    float center_axis2,
+    float radius,
+    SpatialzCtx spatialCtx)
+{
+    CompareCtx ctx = {0};
+
     ctx.spatialCtx = spatialCtx;
 
-    if (!is_spherical) {
-        ctx.local.lat = center_lat;
-        ctx.local.lon = center_lon;
-        ctx.local.km_per_deg_lat = spatialCtx.unit_length;
-        ctx.local.km_per_deg_lon = spatialCtx.unit_length * cos(center_lat * (M_PI / 180.0));
-        ctx.local.radius_squared = radius * radius;
-    } else {
-        ctx.spherical.center_lat_rad = center_lat * (M_PI / 180.0);
-        ctx.spherical.center_lon_rad = center_lon * (M_PI / 180.0);
-        ctx.spherical.cos_center_lat = cos(ctx.spherical.center_lat_rad);
+    center_axis1 =
+        clamp_float(
+            center_axis1,
+            spatialCtx.min_axis1,
+            spatialCtx.min_axis1 + 180.0
+        );
 
-        double R = spatialCtx.unit_length * (180.0 / M_PI);
-        double angular_radius = radius / (2.0 * R);
-        double s = sin(angular_radius);
-        ctx.spherical.max_haversine_a = s * s;
+    center_axis2 =
+        normalize_axis2(
+            center_axis2,
+            &spatialCtx
+        );
+
+    ctx.center_axis1 = center_axis1;
+    ctx.center_axis2 = center_axis2;
+
+    ctx.radius = radius;
+    ctx.radius_squared = radius * radius;
+
+    ctx.center_axis1_radians =
+        deg_to_rad(center_axis1);
+
+    ctx.center_axis2_radians =
+        deg_to_rad(center_axis2);
+
+    ctx.cos_center_axis1 =
+        cos(ctx.center_axis1_radians);
+
+    ctx.axis1_scale =
+        spatialCtx.unit_length;
+
+    ctx.axis2_scale =
+        spatialCtx.unit_length *
+        ctx.cos_center_axis1;
+
+    const float sphere_radius =
+        surface_radius(&spatialCtx);
+
+    ctx.radius_radians =
+        sphere_radius > 0.0
+            ? radius / sphere_radius
+            : 0.0;
+
+    const float radius_degrees =
+        rad_to_deg(ctx.radius_radians);
+
+    const bool use_flat =
+        spatialCtx.flat_max_radius_deg > 0.0 &&
+        radius_degrees <= spatialCtx.flat_max_radius_deg &&
+        fabs(ctx.cos_center_axis1) > 1e-12;
+
+    if (use_flat) {
+        ctx.mode =
+            SPATIAL_QUERY_FLAT;
+    } else {
+        ctx.mode =
+            SPATIAL_QUERY_SPHERICAL;
+
+        const float sin_half_radius =
+            sin(ctx.radius_radians * 0.5);
+
+        ctx.max_haversine_a =
+            sin_half_radius *
+            sin_half_radius;
     }
 
     return ctx;
 }
 
-double spatial_code_is_in_local_radius(uint64_t code, CompareCtx ctx) {
-    double lat1;
-    double lon1;
-    if (!spatial_decode(code, &lat1, &lon1, ctx.spatialCtx)) {
+float spatial_code_is_in_flat_radius(
+    uint64_t code,
+    const CompareCtx *ctx)
+{
+    if (ctx == NULL)
+        return -1.0;
+
+    float axis1;
+    float axis2;
+
+    if (!spatial_decode(
+            code,
+            &axis1,
+            &axis2,
+            ctx->spatialCtx)) {
+
         return -1.0;
     }
 
-    double dlon = lon1 - ctx.local.lon;
-    while (dlon < -180.0) dlon += 360.0;
-    while (dlon > 180.0) dlon -= 360.0;
+    const float d_axis1 =
+        axis1 - ctx->center_axis1;
 
-    double dx = dlon * ctx.local.km_per_deg_lon;
-    double dy = (lat1 - ctx.local.lat) * ctx.local.km_per_deg_lat;
+    const float raw_d_axis2 =
+        axis2 - ctx->center_axis2;
 
-    double distance_squared = dx * dx + dy * dy;
-    if (distance_squared > ctx.local.radius_squared) {
+    const float period = 360.0;
+
+    float d_axis2 = raw_d_axis2;
+
+    d_axis2 =
+        fmod(
+            raw_d_axis2 + period * 0.5,
+            period
+        );
+
+    if (d_axis2 < 0.0)
+        d_axis2 += period;
+
+    d_axis2 -= period * 0.5;
+
+    const float physical_axis1 =
+        d_axis1 * ctx->axis1_scale;
+
+    const float physical_axis2 =
+        d_axis2 * ctx->axis2_scale;
+
+    const float distance_squared =
+        physical_axis1 * physical_axis1 +
+        physical_axis2 * physical_axis2;
+
+    if (distance_squared >
+        ctx->radius_squared) {
+
         return -1.0;
     }
+
     return distance_squared;
 }
 
-double spatial_code_is_in_spherical_radius(uint64_t code, CompareCtx ctx) {
-    double row_lat;
-    double row_lon;
-    if (!spatial_decode(code, &row_lat, &row_lon, ctx.spatialCtx)) {
+float spatial_code_is_in_spherical_radius(
+    uint64_t code,
+    const CompareCtx *ctx)
+{
+    if (ctx == NULL)
+        return -1.0;
+
+    float axis1;
+    float axis2;
+
+    if (!spatial_decode(
+            code,
+            &axis1,
+            &axis2,
+            ctx->spatialCtx)) {
+
         return -1.0;
     }
 
-    double row_lat_rad = row_lat * (M_PI / 180.0);
-    double row_lon_rad = row_lon * (M_PI / 180.0);
+    axis2 =
+        normalize_axis2(
+            axis2,
+            &ctx->spatialCtx
+        );
 
-    double dlat = row_lat_rad - ctx.spherical.center_lat_rad;
-    double dlon = row_lon_rad - ctx.spherical.center_lon_rad;
+    const float axis1_rad =
+        deg_to_rad(axis1);
 
-    double sin_dlat = sin(dlat * 0.5);
-    double sin_dlon = sin(dlon * 0.5);
+    const float axis2_rad =
+        deg_to_rad(axis2);
 
-    double a = (sin_dlat * sin_dlat) + 
-               (ctx.spherical.cos_center_lat * cos(row_lat_rad) * sin_dlon * sin_dlon);
+    const float d_axis1 =
+        axis1_rad -
+        ctx->center_axis1_radians;
 
-    if (a > ctx.spherical.max_haversine_a) {
+    const float d_axis2 =
+        axis2_rad -
+        ctx->center_axis2_radians;
+
+    const float sin_axis1 =
+        sin(d_axis1 * 0.5);
+
+    const float sin_axis2 =
+        sin(d_axis2 * 0.5);
+
+    const float a =
+        sin_axis1 * sin_axis1 +
+        ctx->cos_center_axis1 *
+        cos(axis1_rad) *
+        sin_axis2 * sin_axis2;
+
+    if (a >
+        ctx->max_haversine_a) {
+
         return -1.0;
     }
+
     return a;
+}
+
+float spatial_code_is_in_radius(
+    uint64_t code,
+    const CompareCtx *ctx)
+{
+    if (ctx == NULL)
+        return -1.0;
+
+    if (ctx->mode ==
+        SPATIAL_QUERY_SPHERICAL) {
+
+        return spatial_code_is_in_spherical_radius(
+            code,
+            ctx
+        );
+    }
+
+    return spatial_code_is_in_flat_radius(
+        code,
+        ctx
+    );
 }
