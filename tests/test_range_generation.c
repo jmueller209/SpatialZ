@@ -92,16 +92,13 @@ int main() {
         }
 
         double max_radius = 180.0 * ctx.unit_length;
-        double flat_limit = ctx.flat_max_radius_deg * ctx.unit_length;
         double radius = 0.0;
 
         int rad_bias = rand() % 100;
         if (rad_bias < 5) {
             radius = 0.0;
         } else if (rad_bias < 40) {
-            radius = random_double(0.0001, flat_limit);
-        } else if (rad_bias < 90) {
-            radius = random_double(flat_limit, 90.0 * ctx.unit_length);
+            radius = random_double(0.0001, 90.0 * ctx.unit_length);
         } else {
             radius = random_double(90.0 * ctx.unit_length, max_radius);
         }

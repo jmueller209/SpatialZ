@@ -8,13 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef SPATIALZ_PI
-#define SPATIALZ_PI 3.14159265358979323846f
-#endif
-
-#define SPATIALZ_MAX_GRID_LEVEL 32U
-
-// Switched to float to prevent slow 64-bit software emulation on 32-bit MCUs
 typedef struct {
     float center_axis1;
     float center_axis2;
@@ -151,8 +144,8 @@ static void get_block_bounds(const ZBlock *block, float *min_axis1, float *max_a
     } else {
         const uint64_t gy1 = (uint64_t)block->gy + size;
         const uint64_t gx1 = (uint64_t)block->gx + size;
-        axis1_1 = ((float)gy1 / 4294967295.0f) * 180.0f;
-        axis2_1 = ((float)gx1 / 4294967295.0f) * 360.0f;
+        axis1_1 = ((float)gy1 / GRID_MAX_UINT) * 180.0f;
+        axis2_1 = ((float)gx1 / GRID_MAX_UINT) * 360.0f;
     }
 
     *min_axis1 = fminf(axis1_0, axis1_1);
@@ -259,7 +252,6 @@ static uint64_t next_pow2_u64(uint64_t value) {
 
 static uint64_t count_root_blocks(uint32_t min_gx, uint32_t max_gx, uint32_t min_gy, uint32_t max_gy, uint64_t size) {
     if (size == 0ULL) return UINT64_MAX;
-    // MCU Optimization: Bitwise masking instead of slow integer division for powers of 2
     const uint64_t mask = ~(size - 1ULL);
     const uint64_t start_x = min_gx & mask;
     const uint64_t end_x = max_gx & mask;
@@ -352,29 +344,35 @@ static int make_children(const ZBlock *parent, const FastQueryCtx *queries, ZBlo
     return count;
 }
 
-static MortonRange encode_block(const ZBlock *block) {
+static MortonRange encode_block(const ZBlock *block)
+{
     MortonRange range;
+
     if (block->level == SPATIALZ_MAX_GRID_LEVEL) {
         range.start_code = 0ULL;
-        range.end_code = UINT64_MAX;
+        if (SPATIALZ_MAX_GRID_LEVEL == 32) {
+            range.end_code = UINT64_MAX;
+        } else {
+            range.end_code = (1ULL << (2 * SPATIALZ_MAX_GRID_LEVEL)) - 1ULL;
+        }
         return range;
     }
+
     const uint64_t start = morton_encode_grid(block->gx, block->gy);
     const uint32_t bit_count = 2U * block->level;
     const uint64_t count = 1ULL << bit_count;
 
     range.start_code = start;
     range.end_code = start + count - 1ULL;
+
     return range;
 }
 
-// MCU Optimization: Replaced O(N^2) evaluation loops with a greedy O(N) heuristic approach
 static void refine_blocks(ZBlock *blocks, int *count, int max_ranges, const FastQueryCtx *queries) {
     for (;;) {
         int best_index = -1;
         float largest_dead_area = -1.0f;
 
-        // Simply find the intersecting block with the highest dead area to split
         for (int i = 0; i < *count; ++i) {
             if (blocks[i].cls == BLOCK_INTERSECT && blocks[i].level > 0) {
                 if (blocks[i].dead_area > largest_dead_area) {
@@ -384,12 +382,12 @@ static void refine_blocks(ZBlock *blocks, int *count, int max_ranges, const Fast
             }
         }
 
-        if (best_index < 0) break; // Nothing left to split
+        if (best_index < 0) break;
 
         ZBlock children[4];
         const int child_count = make_children(&blocks[best_index], queries, children);
 
-        if (*count - 1 + child_count > max_ranges) break; // Buffer full
+        if (*count - 1 + child_count > max_ranges) break;
 
         if (child_count == 0) {
             blocks[best_index] = blocks[*count - 1];
@@ -538,6 +536,21 @@ bool spatial_get_radius_ranges(
     const SpatialzCtx *ctx)
 {
     if (!out_ranges || !out_num_ranges || max_ranges <= 0) return false;
+
+    if (radius <= 0.0f) {
+        float int_y_dbl, int_x_dbl;
+        to_internal_sphere(center_axis1, center_axis2, *ctx, &int_y_dbl, &int_x_dbl);
+
+        uint32_t gx = axis2_to_grid((float)int_x_dbl);
+        uint32_t gy = axis1_to_grid((float)int_y_dbl - 90.0f);
+
+        uint64_t code = morton_encode_grid(gx, gy);
+
+        out_ranges[0].start_code = code;
+        out_ranges[0].end_code = code;
+        *out_num_ranges = 1;
+        return true;
+    }
 
     if (max_ranges > SPATIALZ_MAX_INTERNAL_BLOCKS) {
         max_ranges = SPATIALZ_MAX_INTERNAL_BLOCKS;

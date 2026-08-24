@@ -4,8 +4,6 @@
 #include <stdint.h>
 #include "../include/spatial_z.h"
 
-#define SPATIALZ_PI 3.14159265358979323846
-
 static inline uint64_t spread_bits_32_to_64(uint32_t v) {
     uint64_t x = v;
     x = (x | (x << 16)) & 0x00000ffff0000ffffULL;

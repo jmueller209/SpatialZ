@@ -8,10 +8,6 @@
 
 #include "../include/spatial_z.h"
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-
 #define MAX_RANGES 16
 
 typedef struct {
@@ -253,7 +249,7 @@ int main(void)
 {
     srand((unsigned int)time(NULL));
 
-    SpatialzCtx ctx = spatial_create_ctx(-90, 0, 1, 0);
+    SpatialzCtx ctx = spatial_create_ctx(-90, 0, 1);
 
     const RadiusBucket buckets[] = {
         {0.001, 0.05,  "Micro (< 0.05 deg)"},

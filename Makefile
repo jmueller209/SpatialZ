@@ -37,9 +37,9 @@ test_range_generation: $(BUILD_DIR) tests/test_range_generation.c $(SRC)
 	./$(BUILD_DIR)/test_range_generation
 
 
-test_range_coverage: $(BUILD_DIR) tests/test_range_coverage.c $(SRC)
-	$(CC) $(CFLAGS) tests/test_range_coverage.c $(SRC) -o $(BUILD_DIR)/test_range_coverage $(LDFLAGS)
-	./$(BUILD_DIR)/test_range_coverage
+test_point_in_radius: $(BUILD_DIR) tests/test_point_in_radius.c $(SRC)
+	$(CC) $(CFLAGS) tests/test_point_in_radius.c $(SRC) -o $(BUILD_DIR)/test_point_in_radius $(LDFLAGS)
+	./$(BUILD_DIR)/test_point_in_radius
 
 # -----------------------------------------------------
 # Python Scripts
@@ -50,8 +50,6 @@ plot_benchmark:
 plot_interactive:
 	python3 scripts/plot_interactive.py
 
-plot_terminal:
-	python3 scripts/plot_terminal.py
 
 # -----------------------------------------------------
 # Cleanup
