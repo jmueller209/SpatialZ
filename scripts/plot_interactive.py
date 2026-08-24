@@ -10,11 +10,11 @@ def compile_c_code():
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     build_dir = os.path.join(base_dir, "build")
     os.makedirs(build_dir, exist_ok=True)
-    exe_name = "test_ranges.exe" if os.name == "nt" else "test_ranges"
+    exe_name = "make_visualization_data.exe" if os.name == "nt" else "make_visualization_data"
     out_path = os.path.join(build_dir, exe_name)
 
     sources = [
-        os.path.join(base_dir, "tests", "test_ranges.c"),
+        os.path.join(base_dir, "tests", "make_visualization_data.c"),
         os.path.join(base_dir, "src", "codec.c"),
         os.path.join(base_dir, "src", "distances.c"),
         os.path.join(base_dir, "src", "ranges.c"),

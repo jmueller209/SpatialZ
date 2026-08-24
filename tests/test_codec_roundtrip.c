@@ -18,13 +18,8 @@ int main() {
 
     printf("=== RUNNING SPATIAL_Z GENERIC ROUND-TRIP TEST ===\n\n");
 
-    /* 
-     * Define a generic context using the NEW signature (min_y, min_x, unit, flat_rad)
-     * Example uses Celestial bounds (Dec: -90 to +90, RA: 0 to 360, Unit: 1.0)
-     */
-    SpatialzCtx ctx = spatial_create_ctx(-90, 0, 1.0, 5.0);
+    SpatialzCtx ctx = spatial_create_ctx(-90, 0, 1.0);
 
-    // Die neuen impliziten Kugelgrenzen berechnen
     float max_axis1 = ctx.min_axis1 + 180.0;
     float max_axis2 = ctx.min_axis2 + 360.0;
 
@@ -38,7 +33,6 @@ int main() {
     clock_t start_time = clock();
 
     for (int i = 0; i < total_tests; i++) {
-        // Generate coordinates dynamically based on implicit boundaries
         float orig_axis1 = random_float(ctx.min_axis1, max_axis1);
         float orig_axis2 = random_float(ctx.min_axis2, max_axis2);
 
@@ -54,20 +48,14 @@ int main() {
             continue;
         }
 
-        // 1. Calculate physical error on Y-Axis
         float dy = (decoded_axis1 - orig_axis1) * ctx.unit_length;
         float mean_axis1 = 0.5 * (orig_axis1 + decoded_axis1);
-        
-        // 2. Shift mean_axis1 back to a pure -90 to +90 sphere for the cosine scaling
         float true_lat = mean_axis1 - ctx.min_axis1 - 90.0;
-        
-        // 3. Calculate distance on X-Axis and handle Wrap-Around (360 -> 0)
         float raw_dx = decoded_axis2 - orig_axis2;
         if (raw_dx > 180.0) raw_dx -= 360.0;
         if (raw_dx < -180.0) raw_dx += 360.0;
 
         float dx = raw_dx * ctx.unit_length * cos(true_lat * (M_PI / 180.0));
-        
         float error_units = sqrt(dx * dx + dy * dy);
 
         if (error_units > max_error_units) {
@@ -76,7 +64,6 @@ int main() {
 
         if (error_units > tolerance_units) {
             failed_tests++;
-            // Cap the print statements to prevent I/O bottlenecks on massive failures
             if (failed_tests <= 10) {
                 printf("[TOLERANCE EXCEEDED] Iteration %d:\n", i);
                 printf("  Original: axis1=%.6f, axis2=%.6f\n", orig_axis1, orig_axis2);
@@ -97,7 +84,6 @@ int main() {
     printf("Max Physical Error: %.8f units\n", max_error_units);
     printf("Tolerance Limit:    %.8f units\n", tolerance_units);
     printf("Execution Time:     %.4f seconds\n", cpu_time_used);
-    
     if (failed_tests == 0) {
         printf("\nRESULT: ALL GENERIC ROUND-TRIP TESTS PASSED SUCCESSFULLY!\n");
         return 0;
