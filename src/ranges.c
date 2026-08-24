@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 typedef struct {
     float center_axis1;
@@ -195,11 +196,10 @@ static BlockClass classify_spherical(ZBlock *block, const FastQueryCtx *query) {
         return BLOCK_INSIDE;
     }
 
-    // MCU Optimization: Precalculate inner loop trig functions
     float sin_a1[3], cos_a1[3], sin_a2[3], cos_a2[3];
     const float axis1_samples[3] = { min_axis1, mid_axis1, max_axis1 };
     const float axis2_samples[3] = { min_axis2, mid_axis2, max_axis2 };
-    
+
     for (int i = 0; i < 3; ++i) {
         sin_a1[i] = sinf(deg_to_rad(axis1_samples[i] - 90.0f));
         cos_a1[i] = cosf(deg_to_rad(axis1_samples[i] - 90.0f));
@@ -422,8 +422,7 @@ static bool make_query(float center_axis1, float center_axis2, float radius, con
     query->units_per_degree_axis2 = (float)ctx->unit_length * axis2_scale;
 
     query->radius_rad = query->sphere_radius > 0.0f ? radius / query->sphere_radius : 0.0f;
-    
-    // Fixed unit sphere chord length logic
+
     const float half_chord = sinf(query->radius_rad * 0.5f);
     query->radius_chord_sq = 4.0f * half_chord * half_chord;
 
@@ -536,6 +535,20 @@ bool spatial_get_radius_ranges(
     const SpatialzCtx *ctx)
 {
     if (!out_ranges || !out_num_ranges || max_ranges <= 0) return false;
+
+    #if defined(DEBUG)
+    printf("[SPATIALZ DEBUG] spatial_get_radius_ranges invoked:\n");
+    printf("  -> center_axis1: %.6f\n", center_axis1);
+    printf("  -> center_axis2: %.6f\n", center_axis2);
+    printf("  -> radius:       %.6f\n", radius);
+    printf("  -> max_ranges:   %d\n", max_ranges);
+    if (ctx) {
+        printf("  -> ctx: min_axis1=%.2f, min_axis2=%.2f, unit_length=%.2f\n", 
+               ctx->min_axis1, ctx->min_axis2, ctx->unit_length);
+    } else {
+        printf("  -> ctx: NULL\n");
+    }
+    #endif
 
     if (radius <= 0.0f) {
         float int_y_dbl, int_x_dbl;

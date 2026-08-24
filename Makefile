@@ -1,6 +1,18 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -O3 -std=c99
+BASE_CFLAGS = -Wall -Wextra -std=c99
 LDFLAGS = -lm
+
+# -----------------------------------------------------
+# Optional Debug Configuration
+# Usage: make DEBUG=1 [target] (e.g., make test_astro_interactive DEBUG=1)
+# -----------------------------------------------------
+DEBUG ?= 0
+ifeq ($(DEBUG), 1)
+    CFLAGS = $(BASE_CFLAGS) -g -O0 -DSPATIALZ_DEBUG -DDEBUG
+    $(info >>> DEBUG MODE ENABLED (-g -O0 -DSPATIALZ_DEBUG) <<<)
+else
+    CFLAGS = $(BASE_CFLAGS) -O3
+endif
 
 SRC = src/codec.c src/context.c src/distances.c src/ranges.c src/utils.c
 OBJ = $(SRC:.c=.o)
@@ -36,10 +48,13 @@ test_range_generation: $(BUILD_DIR) tests/test_range_generation.c $(SRC)
 	$(CC) $(CFLAGS) tests/test_range_generation.c $(SRC) -o $(BUILD_DIR)/test_range_generation $(LDFLAGS)
 	./$(BUILD_DIR)/test_range_generation
 
-
 test_point_in_radius: $(BUILD_DIR) tests/test_point_in_radius.c $(SRC)
 	$(CC) $(CFLAGS) tests/test_point_in_radius.c $(SRC) -o $(BUILD_DIR)/test_point_in_radius $(LDFLAGS)
 	./$(BUILD_DIR)/test_point_in_radius
+
+test_astro_interactive: $(BUILD_DIR) tests/test_astro_interactive.c $(SRC)
+	$(CC) $(CFLAGS) tests/test_astro_interactive.c $(SRC) -o $(BUILD_DIR)/test_astro_interactive $(LDFLAGS)
+	./$(BUILD_DIR)/test_astro_interactive
 
 # -----------------------------------------------------
 # Python Scripts
@@ -49,7 +64,6 @@ plot_benchmark:
 
 plot_interactive:
 	python3 scripts/plot_interactive.py
-
 
 # -----------------------------------------------------
 # Cleanup

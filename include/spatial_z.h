@@ -12,11 +12,13 @@ extern "C" {
 /*
  * Maximum depth of the spatial quadtree.
  *
- * A level of 32 means the coordinate axes are divided into 2^32
- * discrete cells. This perfectly utilizes a 64-bit Morton code
- * (32 bits for axis1 + 32 bits for axis2).
+ * A level of 31 means the coordinate axes are divided into 2^31
+ * discrete cells. This utilizes a 62 bit of a 64-bit Morton code
+ * (31 bits for axis1 + 31 bits for axis2).
  * If running on constrained microcontrollers with 32-bit floats,
- * this can be reduced (e.g., to 22) to prevent precision loss.
+ * this can be reduced (e.g., to 22) to prevent precision loss. 
+ * Do not use values greater than 31 as this might lead to overflow
+ * issues.
  */
 #ifndef SPATIALZ_MAX_GRID_LEVEL
 #define SPATIALZ_MAX_GRID_LEVEL 22U
