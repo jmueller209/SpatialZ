@@ -423,6 +423,10 @@ static bool make_query(float center_axis1, float center_axis2, float radius, con
 
     query->radius_rad = query->sphere_radius > 0.0f ? radius / query->sphere_radius : 0.0f;
 
+    if (query->radius_rad > SPATIALZ_PI) {
+        query->radius_rad = SPATIALZ_PI;
+    }
+
     const float half_chord = sinf(query->radius_rad * 0.5f);
     query->radius_chord_sq = 4.0f * half_chord * half_chord;
 
@@ -536,7 +540,7 @@ bool spatial_get_radius_ranges(
 {
     if (!out_ranges || !out_num_ranges || max_ranges <= 0) return false;
 
-    #if defined(DEBUG)
+    #if defined(DEBUG_MODE)
     printf("[SPATIALZ DEBUG] spatial_get_radius_ranges invoked:\n");
     printf("  -> center_axis1: %.6f\n", center_axis1);
     printf("  -> center_axis2: %.6f\n", center_axis2);
