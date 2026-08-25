@@ -54,7 +54,10 @@ CompareCtx spatial_create_compare_ctx(
     latlon_to_vector(lat_rad, lon_rad, ctx.center_v);
 
     const float sphere_radius = surface_radius(&spatialCtx);
-    const float radius_radians = sphere_radius > 0.0f ? radius / sphere_radius : 0.0f;
+    float radius_radians = sphere_radius > 0.0f ? radius / sphere_radius : 0.0f;
+    if (radius_radians > SPATIALZ_PI) {
+        radius_radians = SPATIALZ_PI;
+    }
     const float half_chord = sinf(radius_radians * 0.5f);
 
     ctx.radius_chord_sq = 4.0f * half_chord * half_chord;
